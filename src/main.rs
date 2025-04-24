@@ -1,4 +1,5 @@
 mod run_file;
+mod run_repl;
 mod run_tui;
 mod state;
 
@@ -36,7 +37,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Commands::File(args) => {
             run_file::run_file(args.path)?;
         }
-        _ => unimplemented!(),
+        Commands::Repl => {
+            run_repl::run_repl()?;
+        }
     }
 
     println!("Bye, and thanks for using Rambda! <3");
