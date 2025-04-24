@@ -1,5 +1,9 @@
-mod ast;
-mod lexer;
+pub mod ast;
+pub mod lexer;
+pub mod vm;
 
-pub use ast::{abs, apl, var, Expr, ReductionType};
-pub use lexer::{Lexer, Parser, Token};
+pub mod prelude {
+    pub use crate::ast::*;
+    pub use crate::lexer::*;
+    pub use crate::vm::*;
+}

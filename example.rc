@@ -1,0 +1,9 @@
+ eval (λx.x) y
+ eval (λf,x.f x) (λy.y) z
+ eval λx,y.x y
+ eval (λx,y.x y) z w
+ eval (λn,f,x.f (n f x)) (λf,x.f x)
+ eval (λx.(λy.x) y) z
+ eval (λx,y.x y) y
+ eval (λx.λy.λy. x y) y
+ eval (λx.λy.λx. x y) y
