@@ -3,7 +3,7 @@ use anyhow::Result;
 use std::io::{self, Write};
 
 pub fn run_repl() -> Result<()> {
-    let mut state = State::new();
+    let mut state = State::new()?;
     let stdin = io::stdin();
     let mut stdout = io::stdout();
 

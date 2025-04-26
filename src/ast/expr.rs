@@ -1,5 +1,5 @@
 use super::RedType;
-use std::{collections::HashSet, fmt, rc::Rc};
+use std::{collections::HashSet, rc::Rc};
 
 #[derive(Debug, Clone)]
 pub enum Expr {
@@ -13,20 +13,91 @@ pub enum Expr {
     Apl(Rc<Expr>, Rc<Expr>),
 }
 
-impl fmt::Display for Expr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl Expr {
+    pub fn fmt_with_config(&self, color: bool, ascii: bool, merge: bool) -> String {
+        let reset = if color { "\x1b[0m" } else { "" };
+        let lambda = if color { "\x1b[1m\x1b[38;5;2m" } else { "" };
+        let var = if color { "\x1b[1m\x1b[38;5;4m" } else { "" };
+        let gray = if color { "\x1b[0m\x1b[38;5;240m" } else { "" };
+
         match self {
-            Expr::Var(name) => write!(f, "{}", name),
-            Expr::Abs(param, body) => write!(f, "λ{}.{}", param, body),
-            Expr::Apl(e1, e2) => match **e2 {
-                Expr::Apl(_, _) => write!(f, "{} ({})", e1, e2),
-                _ => write!(f, "{} {}", e1, e2),
-            },
+            Expr::Var(name) => name.clone(),
+            Expr::Abs(from, to) => {
+                if merge {
+                    let (params, body) = self.collect_abstractions();
+                    format!(
+                        "{}λ{}{}{}.{}{}",
+                        lambda,
+                        var,
+                        params.join(","),
+                        gray,
+                        reset,
+                        body.fmt_with_config(color, ascii, merge),
+                    )
+                } else {
+                    format!(
+                        "{}λ{}{}{}.{}{}",
+                        lambda,
+                        var,
+                        from,
+                        gray,
+                        reset,
+                        to.fmt_with_config(color, ascii, merge),
+                    )
+                }
+            }
+            Expr::Apl(_, _) => {
+                let apps = self.collect_applications();
+
+                let mut parts = Vec::new();
+                for (i, expr) in apps.iter().enumerate() {
+                    let s = match expr {
+                        Expr::Apl(_, _) | Expr::Abs(_, _) if i != 0 => {
+                            format!(
+                                "{}({}{}{}){}",
+                                gray,
+                                reset,
+                                expr.fmt_with_config(color, ascii, merge),
+                                gray,
+                                reset
+                            )
+                        }
+                        _ => expr.fmt_with_config(color, ascii, merge),
+                    };
+                    parts.push(s);
+                }
+
+                parts.join(" ")
+            }
         }
     }
-}
 
-impl Expr {
+    fn collect_abstractions(&self) -> (Vec<String>, &Expr) {
+        let mut params = Vec::new();
+        let mut current = self;
+
+        while let Expr::Abs(param, body) = current {
+            params.push(param.clone());
+            current = body;
+        }
+
+        (params, current)
+    }
+
+    fn collect_applications(&self) -> Vec<&Expr> {
+        let mut apps = Vec::new();
+        let mut current = self;
+
+        while let Expr::Apl(e1, e2) = current {
+            apps.push(e2.as_ref());
+            current = e1.as_ref();
+        }
+
+        apps.push(current);
+        apps.reverse();
+        apps
+    }
+
     pub fn free_vars(&self) -> HashSet<String> {
         match self {
             Expr::Var(name) => [name.clone()].into_iter().collect(),
@@ -89,6 +160,7 @@ impl Expr {
             Expr::Var(_) => (self.clone(), RedType::NoReduction),
             Expr::Abs(param, body) => {
                 if param == var {
+                    println!("Substituting a bound variable");
                     (self.clone(), RedType::NoReduction)
                 } else if replacement.is_free_in(param) {
                     let fresh = body.fresh_var(param);
@@ -134,14 +206,14 @@ impl Expr {
         match self {
             Expr::Apl(e1, e2) => {
                 if let Expr::Abs(param, body) = &**e1 {
-                    return body.substitute_once(param, &**e2);
+                    body.substitute_once(param, &**e2);
                 }
 
                 let (reduced_e1, red1) = e1.eval_step();
                 if red1 != RedType::NoReduction {
                     return (
                         Expr::Apl(Rc::new(reduced_e1), e2.clone()),
-                        RedType::ContextualReduction("left".to_string()),
+                        RedType::ContextualReduction("l".to_string()),
                     );
                 }
 
@@ -149,7 +221,7 @@ impl Expr {
                 if red2 != RedType::NoReduction {
                     return (
                         Expr::Apl(e1.clone(), Rc::new(reduced_e2)),
-                        RedType::ContextualReduction("right".to_string()),
+                        RedType::ContextualReduction("r".to_string()),
                     );
                 }
 

@@ -2,7 +2,7 @@ use super::State;
 use anyhow::{anyhow, Result};
 
 pub fn run_file(file_name: String) -> Result<()> {
-    let mut state = State::new();
+    let mut state = State::new()?;
     if !std::path::Path::new(&file_name).exists() {
         return Err(anyhow!("File not found"));
     }

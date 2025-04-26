@@ -1,0 +1,12 @@
+# Output using ascii or utf8
+useUtf8: true
+# Output colors usiong ascii color codes
+useColor: true
+# Merge curring args
+mergeArgs: true
+
+# Allow special chars like λ to be entered using magic char: λ = \l
+magic: '\'
+
+# Print output character by character
+printEffect: true

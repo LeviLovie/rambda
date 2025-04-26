@@ -1,5 +1,3 @@
-use std::fmt;
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum RedType {
     // (λx.M) N → M[x := N]
@@ -11,17 +9,48 @@ pub enum RedType {
     // Reduction inside a subexpression
     ContextualReduction(String),
 
+    // Simplification of a term
+    Simplification(String),
+
     // No reduction performed
     NoReduction,
 }
 
-impl fmt::Display for RedType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl RedType {
+    pub fn fmt_with_config(&self, color: bool, utf8: bool) -> String {
+        let reset = if color { "\x1b[0m" } else { "" };
+        let type_ = if color { "\x1b[1m\x1b[38;5;3m" } else { "" };
+        let gray = if color { "\x1b[0m\x1b[38;5;240m" } else { "" };
+        let alpha = if utf8 { "α" } else { "A" };
+        let beta = if utf8 { "β" } else { "B" };
+        let gamma = if utf8 { "γ" } else { "C" };
+
         match self {
-            RedType::BetaReduction(var) => write!(f, "β({})", var),
-            RedType::AlphaConversion(from, to) => write!(f, "α({} -> {})", from, to),
-            RedType::ContextualReduction(var) => write!(f, "C({})", var),
-            RedType::NoReduction => write!(f, "No reduction"),
+            RedType::AlphaConversion(from, to) => {
+                format!(
+                    "{}->{}{}{}({}{}{} > {}{}{}){}",
+                    gray, type_, alpha, gray, reset, from, gray, reset, to, gray, reset
+                )
+            }
+            RedType::BetaReduction(var) => {
+                format!(
+                    "{}->{}{}{}({}{}{}){}",
+                    gray, type_, beta, gray, reset, var, gray, reset
+                )
+            }
+            RedType::ContextualReduction(var) => {
+                format!(
+                    "{}->{}{}{}({}{}{}){}",
+                    gray, type_, gamma, gray, reset, var, gray, reset
+                )
+            }
+            RedType::Simplification(var) => {
+                format!(
+                    "{}->{}{}{}({}{}{}){}",
+                    gray, type_, gamma, gray, reset, var, gray, reset
+                )
+            }
+            RedType::NoReduction => "No reduction".into(),
         }
     }
 }

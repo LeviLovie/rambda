@@ -23,7 +23,7 @@ pub fn run_tui() -> Result<()> {
     terminal.clear()?;
 
     let mut input = String::new();
-    let mut state = State::new();
+    let mut state = State::new()?;
 
     loop {
         terminal.draw(|f| {
