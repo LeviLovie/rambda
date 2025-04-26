@@ -80,7 +80,6 @@ impl State {
                 match self.vm.eval() {
                     Ok(steps) => {
                         for (red_type, expr) in steps {
-                            println!("Red: {}", red_type.fmt_with_config(true, true));
                             self.history.push(format!(
                                 "  {} {}",
                                 red_type

@@ -160,7 +160,6 @@ impl Expr {
             Expr::Var(_) => (self.clone(), RedType::NoReduction),
             Expr::Abs(param, body) => {
                 if param == var {
-                    println!("Substituting a bound variable");
                     (self.clone(), RedType::NoReduction)
                 } else if replacement.is_free_in(param) {
                     let fresh = body.fresh_var(param);
@@ -206,7 +205,7 @@ impl Expr {
         match self {
             Expr::Apl(e1, e2) => {
                 if let Expr::Abs(param, body) = &**e1 {
-                    body.substitute_once(param, &**e2);
+                    return body.substitute_once(param, &**e2);
                 }
 
                 let (reduced_e1, red1) = e1.eval_step();
