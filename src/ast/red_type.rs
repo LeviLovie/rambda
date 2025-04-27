@@ -9,9 +9,6 @@ pub enum RedType {
     // Reduction inside a subexpression
     ContextualReduction(String),
 
-    // Simplification of a term
-    Simplification(String),
-
     // No reduction performed
     NoReduction,
 }
@@ -39,12 +36,6 @@ impl RedType {
                 )
             }
             RedType::ContextualReduction(var) => {
-                format!(
-                    "{}->{}{}{}({}{}{}){}",
-                    gray, type_, gamma, gray, reset, var, gray, reset
-                )
-            }
-            RedType::Simplification(var) => {
                 format!(
                     "{}->{}{}{}({}{}{}){}",
                     gray, type_, gamma, gray, reset, var, gray, reset

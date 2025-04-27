@@ -7,11 +7,11 @@ use crossterm::{
 };
 use std::{io, thread, time::Duration};
 use tui::{
+    Terminal,
     backend::CrosstermBackend,
     layout::{Alignment, Constraint, Direction, Layout},
     style::Style,
     widgets::{Block, BorderType, Borders, Paragraph},
-    Terminal,
 };
 
 pub fn run_tui() -> Result<()> {

@@ -80,6 +80,9 @@ impl State {
                 match self.vm.eval() {
                     Ok(steps) => {
                         for (red_type, expr) in steps {
+                            if red_type == rambda::ast::RedType::NoReduction {
+                                continue;
+                            }
                             self.history.push(format!(
                                 "  {} {}",
                                 red_type

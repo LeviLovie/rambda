@@ -24,6 +24,7 @@ pub fn run_repl() -> Result<()> {
 
         state.exec(line.to_string());
         println!("{}", state.history.join("\n"));
+        state.history.clear();
     }
 
     Ok(())

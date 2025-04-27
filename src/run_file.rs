@@ -1,5 +1,5 @@
 use super::State;
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 
 pub fn run_file(file_name: String) -> Result<()> {
     let mut state = State::new()?;

@@ -39,9 +39,13 @@ impl Vm {
         let mut is_normal_form = false;
         while !is_normal_form {
             if let Some(expr) = &self.current_expr {
-                let (next_expr, reduction_type) = expr.eval_step();
-                if reduction_type != RedType::NoReduction {
-                    steps.push((reduction_type, next_expr.clone()));
+                println!(
+                    "Current expression: {}",
+                    expr.fmt_with_config(false, false, false)
+                );
+                let (next_expr, reds) = expr.eval_step();
+                for red in reds {
+                    steps.push((red.clone(), expr.clone()));
                 }
                 self.current_expr = Some(next_expr);
             } else {

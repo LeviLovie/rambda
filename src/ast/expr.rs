@@ -46,29 +46,19 @@ impl Expr {
                     )
                 }
             }
-            Expr::Apl(_, _) => {
-                let apps = self.collect_applications();
-
-                let mut parts = Vec::new();
-                for (i, expr) in apps.iter().enumerate() {
-                    let s = match expr {
-                        Expr::Apl(_, _) | Expr::Abs(_, _) if i != 0 => {
-                            format!(
-                                "{}({}{}{}){}",
-                                gray,
-                                reset,
-                                expr.fmt_with_config(color, ascii, merge),
-                                gray,
-                                reset
-                            )
-                        }
-                        _ => expr.fmt_with_config(color, ascii, merge),
-                    };
-                    parts.push(s);
+            Expr::Apl(expr, _) => match &**expr {
+                Expr::Apl(_, _) | Expr::Abs(_, _) => {
+                    format!(
+                        "{}({}{}{}){}",
+                        gray,
+                        reset,
+                        expr.fmt_with_config(color, ascii, merge),
+                        gray,
+                        reset
+                    )
                 }
-
-                parts.join(" ")
-            }
+                _ => expr.fmt_with_config(color, ascii, merge),
+            },
         }
     }
 
@@ -82,20 +72,6 @@ impl Expr {
         }
 
         (params, current)
-    }
-
-    fn collect_applications(&self) -> Vec<&Expr> {
-        let mut apps = Vec::new();
-        let mut current = self;
-
-        while let Expr::Apl(e1, e2) = current {
-            apps.push(e2.as_ref());
-            current = e1.as_ref();
-        }
-
-        apps.push(current);
-        apps.reverse();
-        apps
     }
 
     pub fn free_vars(&self) -> HashSet<String> {
@@ -152,43 +128,6 @@ impl Expr {
         new_name
     }
 
-    fn substitute_once(&self, var: &str, replacement: &Expr) -> (Expr, RedType) {
-        match self {
-            Expr::Var(name) if name == var => {
-                (replacement.clone(), RedType::BetaReduction(var.to_string()))
-            }
-            Expr::Var(_) => (self.clone(), RedType::NoReduction),
-            Expr::Abs(param, body) => {
-                if param == var {
-                    (self.clone(), RedType::NoReduction)
-                } else if replacement.is_free_in(param) {
-                    let fresh = body.fresh_var(param);
-                    let renamed_body = body.substitute_once(param, &Expr::Var(fresh.clone())).0;
-                    (
-                        Expr::Abs(fresh.clone(), Rc::new(renamed_body)),
-                        RedType::AlphaConversion(param.clone(), fresh),
-                    )
-                } else {
-                    let (new_body, red) = body.substitute_once(var, replacement);
-                    (Expr::Abs(param.clone(), Rc::new(new_body)), red)
-                }
-            }
-            Expr::Apl(e1, e2) => {
-                let (new_e1, red1) = e1.substitute_once(var, replacement);
-                if red1 != RedType::NoReduction {
-                    (Expr::Apl(Rc::new(new_e1), e2.clone()), red1)
-                } else {
-                    let (new_e2, red2) = e2.substitute_once(var, replacement);
-                    if red2 != RedType::NoReduction {
-                        (Expr::Apl(e1.clone(), Rc::new(new_e2)), red2)
-                    } else {
-                        (self.clone(), RedType::NoReduction)
-                    }
-                }
-            }
-        }
-    }
-
     pub fn is_redex(&self) -> bool {
         matches!(self, Expr::Apl(e1, _) if matches!(**e1, Expr::Abs(_, _)))
     }
@@ -201,52 +140,89 @@ impl Expr {
         }
     }
 
-    pub fn eval_step(&self) -> (Expr, RedType) {
+    pub fn substitute(&self, var: &str, expr: &Expr) -> Expr {
         match self {
-            Expr::Apl(e1, e2) => {
-                if let Expr::Abs(param, body) = &**e1 {
-                    return body.substitute_once(param, &**e2);
+            Expr::Var(v) => {
+                if v == var {
+                    expr.clone()
+                } else {
+                    self.clone()
                 }
-
-                let (reduced_e1, red1) = e1.eval_step();
-                if red1 != RedType::NoReduction {
-                    return (
-                        Expr::Apl(Rc::new(reduced_e1), e2.clone()),
-                        RedType::ContextualReduction("l".to_string()),
-                    );
-                }
-
-                let (reduced_e2, red2) = e2.eval_step();
-                if red2 != RedType::NoReduction {
-                    return (
-                        Expr::Apl(e1.clone(), Rc::new(reduced_e2)),
-                        RedType::ContextualReduction("r".to_string()),
-                    );
-                }
-
-                (self.clone(), RedType::NoReduction)
             }
             Expr::Abs(param, body) => {
-                let (reduced_body, red) = body.eval_step();
-                if red != RedType::NoReduction {
-                    return (Expr::Abs(param.clone(), Rc::new(reduced_body)), red);
+                if param == var {
+                    self.clone() // Shadowing: leave it unchanged
+                } else {
+                    Expr::Abs(param.clone(), Box::new(body.substitute(var, expr)).into())
                 }
-                (self.clone(), RedType::NoReduction)
             }
-            Expr::Var(_) => (self.clone(), RedType::NoReduction),
+            Expr::Apl(e1, e2) => Expr::Apl(
+                Box::new(e1.substitute(var, expr)).into(),
+                Box::new(e2.substitute(var, expr)).into(),
+            ),
         }
+    }
+
+    pub fn eval_step(&self) -> (Expr, Vec<RedType>) {
+        let mut result = self.clone();
+        let mut reds = Vec::new();
+
+        match self {
+            Expr::Apl(e1, e2) => {
+                match &**e1 {
+                    Expr::Abs(param, body) => {
+                        // Beta reduction: (λx.body) e2 --> body[x := e2]
+                        result = body.substitute(param, e2);
+                        reds.push(RedType::BetaReduction(param.clone()));
+                    }
+                    _ => {
+                        // Try to reduce e1 first
+                        let (e1_reduced, mut reds_e1) = e1.eval_step();
+                        if !reds_e1.contains(&RedType::NoReduction) {
+                            result = Expr::Apl(Box::new(e1_reduced).into(), e2.clone());
+                            reds.append(&mut reds_e1);
+                        } else {
+                            // e1 is in normal form, try reducing e2
+                            let (e2_reduced, mut reds_e2) = e2.eval_step();
+                            if !reds_e2.contains(&RedType::NoReduction) {
+                                result = Expr::Apl(e1.clone(), Box::new(e2_reduced).into());
+                                reds.append(&mut reds_e2);
+                            } else {
+                                reds.push(RedType::NoReduction);
+                            }
+                        }
+                    }
+                }
+            }
+            Expr::Abs(param, body) => {
+                if let Expr::Apl(e1, e2) = &**body {
+                    if let Expr::Abs(param2, body2) = &**e1 {
+                        if param != param2 && !body.is_free_in(param) {
+                            let new_var = self.fresh_var(param);
+                            result = body.rename_var(param, &new_var);
+                            reds.push(RedType::BetaReduction(new_var));
+                        }
+                    }
+                } else {
+                    result = body.as_ref().clone();
+                    reds.push(RedType::NoReduction);
+                }
+            }
+            Expr::Var(_) => {
+                reds.push(RedType::NoReduction);
+            }
+        };
+
+        (result, reds)
     }
 
     pub fn eval_full(&self) -> (Expr, Vec<RedType>) {
         let mut reductions = Vec::new();
         let mut expr = self.clone();
         while !expr.is_normal_form() {
-            let (next_expr, reduction_type) = expr.eval_step();
-            if reduction_type == RedType::NoReduction {
-                break;
-            }
+            let (next_expr, reds) = expr.eval_step();
             expr = next_expr;
-            reductions.push(reduction_type);
+            reductions.extend(reds);
         }
         (expr, reductions)
     }
