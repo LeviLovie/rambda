@@ -1,6 +1,18 @@
 use super::RedType;
 use std::{collections::HashSet, rc::Rc};
 
+pub fn var(name: &str) -> Expr {
+    Expr::Var(name.to_string())
+}
+
+pub fn abs(param: &str, body: Expr) -> Expr {
+    Expr::Abs(param.to_string(), Rc::new(body))
+}
+
+pub fn apl(e1: Expr, e2: Expr) -> Expr {
+    Expr::Apl(Rc::new(e1), Rc::new(e2))
+}
+
 #[derive(Debug, Clone)]
 pub enum Expr {
     // Variable: identified by a name
@@ -140,27 +152,43 @@ impl Expr {
         }
     }
 
-    pub fn substitute(&self, var: &str, expr: &Expr) -> Expr {
+    pub fn substitute(&self, var: &str, expr: &Expr) -> (Expr, Vec<RedType>) {
+        let mut result = self.clone();
+        let mut reds: Vec<RedType> = vec![];
+
         match self {
             Expr::Var(v) => {
                 if v == var {
-                    expr.clone()
-                } else {
-                    self.clone()
+                    result = expr.clone();
                 }
             }
             Expr::Abs(param, body) => {
-                if param == var {
-                    self.clone() // Shadowing: leave it unchanged
+                if expr.is_free_in(param) {
+                    let fresh = body.fresh_var(param);
+                    let renamed_body = body.substitute(param, &Expr::Var(fresh.clone())).0;
+                    result = abs(&fresh, renamed_body);
+                    reds.push(RedType::AlphaConversion(param.clone(), fresh));
                 } else {
-                    Expr::Abs(param.clone(), Box::new(body.substitute(var, expr)).into())
+                    let (new_body, red) = body.substitute(var, expr);
+                    result = abs(&param, new_body);
+                    reds.extend(red);
+                }
+                if param != var {
+                    let (body, reds1) = body.substitute(var, expr);
+                    result = abs(&param, body);
+                    reds.extend(reds1);
                 }
             }
-            Expr::Apl(e1, e2) => Expr::Apl(
-                Box::new(e1.substitute(var, expr)).into(),
-                Box::new(e2.substitute(var, expr)).into(),
-            ),
-        }
+            Expr::Apl(e1, e2) => {
+                let (new_e1, reds1) = e1.substitute(var, expr);
+                let (new_e2, reds2) = e2.substitute(var, expr);
+                reds.extend(reds1);
+                reds.extend(reds2);
+                result = apl(new_e1, new_e2);
+            }
+        };
+
+        (result, reds)
     }
 
     pub fn eval_step(&self) -> (Expr, Vec<RedType>) {
@@ -169,47 +197,44 @@ impl Expr {
 
         match self {
             Expr::Apl(e1, e2) => {
-                match &**e1 {
-                    Expr::Abs(param, body) => {
-                        // Beta reduction: (λx.body) e2 --> body[x := e2]
-                        result = body.substitute(param, e2);
-                        reds.push(RedType::BetaReduction(param.clone()));
-                    }
-                    _ => {
-                        // Try to reduce e1 first
-                        let (e1_reduced, mut reds_e1) = e1.eval_step();
-                        if !reds_e1.contains(&RedType::NoReduction) {
-                            result = Expr::Apl(Box::new(e1_reduced).into(), e2.clone());
-                            reds.append(&mut reds_e1);
-                        } else {
-                            // e1 is in normal form, try reducing e2
-                            let (e2_reduced, mut reds_e2) = e2.eval_step();
-                            if !reds_e2.contains(&RedType::NoReduction) {
-                                result = Expr::Apl(e1.clone(), Box::new(e2_reduced).into());
-                                reds.append(&mut reds_e2);
-                            } else {
-                                reds.push(RedType::NoReduction);
-                            }
-                        }
-                    }
+                println!("Eval apl");
+                if let Expr::Abs(param, body) = &**e1 {
+                    println!("Found abs");
+                    let (body, reds1) = body.substitute(param, &**e2);
+                    result = body;
+                    reds.extend(reds1);
+                    return (result, reds);
+                }
+
+                let (new_e1, reds1) = e1.eval_step();
+                if !reds1.is_empty() {
+                    println!("Evaluated e1");
+                    reds.extend(reds1);
+                    result = apl(new_e1, (**e2).clone());
+                    reds.push(RedType::ContextualReduction("l".to_string()));
+                    return (result, reds);
+                }
+
+                let (new_e2, reds2) = e2.eval_step();
+                if !reds1.is_empty() {
+                    println!("Evaluated e2");
+                    reds.extend(reds2);
+                    result = apl((**e1).clone(), new_e2);
+                    reds.push(RedType::ContextualReduction("r".to_string()));
+                    return (result, reds);
                 }
             }
             Expr::Abs(param, body) => {
-                if let Expr::Apl(e1, e2) = &**body {
-                    if let Expr::Abs(param2, body2) = &**e1 {
-                        if param != param2 && !body.is_free_in(param) {
-                            let new_var = self.fresh_var(param);
-                            result = body.rename_var(param, &new_var);
-                            reds.push(RedType::BetaReduction(new_var));
-                        }
-                    }
-                } else {
-                    result = body.as_ref().clone();
-                    reds.push(RedType::NoReduction);
-                }
+                println!("Eval abs");
+
+                let (body, reds1) = body.eval_step();
+                result = abs(param, body);
+                reds.extend(reds1);
+                return (result, reds);
             }
-            Expr::Var(_) => {
-                reds.push(RedType::NoReduction);
+            Expr::Var(name) => {
+                println!("Eval var");
+                return (result, reds);
             }
         };
 
@@ -318,16 +343,4 @@ impl Expr {
 
         (expr, reductions)
     }
-}
-
-pub fn var(name: &str) -> Expr {
-    Expr::Var(name.to_string())
-}
-
-pub fn abs(param: &str, body: Expr) -> Expr {
-    Expr::Abs(param.to_string(), Rc::new(body))
-}
-
-pub fn apl(e1: Expr, e2: Expr) -> Expr {
-    Expr::Apl(Rc::new(e1), Rc::new(e2))
 }

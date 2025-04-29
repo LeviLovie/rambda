@@ -1,5 +1,6 @@
 use super::State;
 use anyhow::Result;
+use rambda::ast::Expr;
 use std::io::{self, Write};
 
 pub fn run_repl() -> Result<()> {
