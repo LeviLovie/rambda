@@ -166,17 +166,14 @@ impl Expr {
                 if expr.is_free_in(param) {
                     let fresh = body.fresh_var(param);
                     let renamed_body = body.substitute(param, &Expr::Var(fresh.clone())).0;
-                    result = abs(&fresh, renamed_body);
+                    let (new_body, reds2) = renamed_body.substitute(var, expr);
+                    result = abs(&fresh, new_body);
                     reds.push(RedType::AlphaConversion(param.clone(), fresh));
+                    reds.extend(reds2);
                 } else {
-                    let (new_body, red) = body.substitute(var, expr);
-                    result = abs(&param, new_body);
-                    reds.extend(red);
-                }
-                if param != var {
-                    let (body, reds1) = body.substitute(var, expr);
-                    result = abs(&param, body);
-                    reds.extend(reds1);
+                    let (new_body, reds2) = body.substitute(var, expr);
+                    result = abs(param, new_body);
+                    reds.extend(reds2);
                 }
             }
             Expr::Apl(e1, e2) => {
@@ -197,45 +194,25 @@ impl Expr {
 
         match self {
             Expr::Apl(e1, e2) => {
-                println!("Eval apl");
                 if let Expr::Abs(param, body) = &**e1 {
-                    println!("Found abs");
-                    let (body, reds1) = body.substitute(param, &**e2);
-                    result = body;
+                    let (new_body, reds1) = body.substitute(param, e2).0.eval_step();
+                    result = new_body;
                     reds.extend(reds1);
+                    reds.push(RedType::BetaReduction(param.to_string()));
                     return (result, reds);
-                }
-
-                let (new_e1, reds1) = e1.eval_step();
-                if !reds1.is_empty() {
-                    println!("Evaluated e1");
+                } else {
+                    let (new_e1, reds1) = e1.eval_step();
+                    result = new_e1;
                     reds.extend(reds1);
-                    result = apl(new_e1, (**e2).clone());
-                    reds.push(RedType::ContextualReduction("l".to_string()));
-                    return (result, reds);
-                }
-
-                let (new_e2, reds2) = e2.eval_step();
-                if !reds1.is_empty() {
-                    println!("Evaluated e2");
-                    reds.extend(reds2);
-                    result = apl((**e1).clone(), new_e2);
-                    reds.push(RedType::ContextualReduction("r".to_string()));
-                    return (result, reds);
                 }
             }
             Expr::Abs(param, body) => {
-                println!("Eval abs");
-
                 let (body, reds1) = body.eval_step();
                 result = abs(param, body);
                 reds.extend(reds1);
                 return (result, reds);
             }
-            Expr::Var(name) => {
-                println!("Eval var");
-                return (result, reds);
-            }
+            Expr::Var(_) => {}
         };
 
         (result, reds)

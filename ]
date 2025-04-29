@@ -1,5 +1,5 @@
 use anyhow::Result;
-use rambda::vm::Vm;
+use rambda::{ast::Expr, vm::Vm};
 use serde::{Deserialize, Serialize};
 
 const CONFIG_FOLDER: &str = "rambda";
@@ -73,24 +73,12 @@ impl State {
             }
             "eval" => {
                 let expr = args.join(" ");
-                match self.vm.parse_expr(&expr) {
-                    Ok(expr) => {
-                        self.history.push(format!(
-                            "{}",
-                            expr.fmt_with_config(
-                                self.config.use_color,
-                                self.config.use_utf8,
-                                self.config.merge_args
-                            )
-                        ));
-                    }
-                    Err(e) => {
-                        self.history.push(format!("Error: {}", e));
-                    }
+                if let Err(e) = self.vm.parse_expr(&expr) {
+                    self.history.push(format!("Error: {}", e));
                 }
-
-                match self.vm.eval() {
-                    Ok((_, steps)) => {
+                self.history.push(expr);
+                let result = match self.vm.eval() {
+                    Ok((result, steps)) => {
                         for (red_type, expr) in steps {
                             self.history.push(format!(
                                 "  {} {}",
@@ -103,11 +91,14 @@ impl State {
                                 ),
                             ));
                         }
+                        result
                     }
                     Err(err) => {
                         self.history.push(format!("Error: {}", err));
+                        Expr::new()
                     }
                 };
+                self.history.push(format!("{}", result));
                 self.history.push(String::new());
             }
             _ => {

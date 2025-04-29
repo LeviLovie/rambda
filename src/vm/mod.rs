@@ -17,35 +17,31 @@ impl Vm {
         }
     }
 
-    pub fn parse_expr(&mut self, input: &str) -> Result<()> {
+    pub fn parse_expr(&mut self, input: &str) -> Result<Expr> {
         self.lexer.reload(input);
         let tokens = self.lexer.tokenize();
         let mut parser = Parser::new(tokens);
         let parsed = parser
             .parse()
             .ok_or(anyhow!("Failed to parse expression"))?;
-        self.current_expr = Some(parsed);
+        self.current_expr = Some(parsed.clone());
 
-        Ok(())
+        Ok(parsed)
     }
 
     pub fn get_expr(&self) -> Option<&Expr> {
         self.current_expr.as_ref()
     }
 
-    pub fn eval(&mut self) -> Result<Vec<(RedType, Expr)>> {
+    pub fn eval(&mut self) -> Result<(Expr, Vec<(RedType, Expr)>)> {
         let mut steps: Vec<(RedType, Expr)> = vec![];
 
         let mut is_normal_form = false;
         while !is_normal_form {
             if let Some(expr) = &self.current_expr {
-                println!(
-                    "Current expression: {}",
-                    expr.fmt_with_config(false, false, false)
-                );
                 let (next_expr, reds) = expr.eval_step();
                 for red in reds {
-                    steps.push((red.clone(), expr.clone()));
+                    steps.push((red.clone(), next_expr.clone()));
                 }
                 self.current_expr = Some(next_expr);
             } else {
@@ -61,7 +57,7 @@ impl Vm {
             }
         }
 
-        self.current_expr = Some(simplified);
-        Ok(steps)
+        self.current_expr = Some(simplified.clone());
+        Ok((simplified, steps))
     }
 }
