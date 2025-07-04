@@ -79,6 +79,9 @@ impl Expr {
         let mut current = self;
 
         while let Expr::Abs(param, body) = current {
+            if params.contains(param) {
+                return (params, current);
+            }
             params.push(param.clone());
             current = body;
         }
@@ -272,6 +275,7 @@ impl Expr {
     pub fn simplify_numbered_vars(&self) -> (Expr, Vec<RedType>) {
         let mut reductions = Vec::new();
         let mut expr = self.clone();
+
         match self {
             Expr::Var(name) => {
                 if let Some((base, num)) = Self::split_name_number(name) {

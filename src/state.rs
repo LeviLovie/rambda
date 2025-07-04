@@ -108,6 +108,7 @@ impl State {
                         self.history.push(format!("Error: {}", err));
                     }
                 };
+
                 self.history.push(String::new());
             }
             _ => {

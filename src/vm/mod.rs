@@ -40,6 +40,10 @@ impl Vm {
         while !is_normal_form {
             if let Some(expr) = &self.current_expr {
                 let (next_expr, reds) = expr.eval_step();
+                println!(
+                    "Next expression: {}",
+                    next_expr.fmt_with_config(false, false, false)
+                );
                 for red in reds {
                     steps.push((red.clone(), next_expr.clone()));
                 }
